@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>IoT Security Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #1e1e24; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 800px; }
+        h1 { text-align: center; color: #4fc3f7; }
+        .card { background: #2a2a35; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); text-align: center; }
+        .status-badge { font-size: 24px; font-weight: bold; padding: 10px 20px; border-radius: 5px; display: inline-block; margin-top: 10px; }
+        .status-ЗАБЛОКИРОВАНО { background: #e53935; }
+        .status-ОТКРЫТО { background: #43a047; }
+        .status-ТРЕВОГА { background: #ffb300; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        input[type="password"] { padding: 10px; width: 200px; border-radius: 4px; border: none; font-size: 16px; text-align: center; }
+        button { padding: 10px 20px; border: none; background: #00bcd4; color: white; font-size: 16px; border-radius: 4px; cursor: pointer; margin-left: 10px; }
+        button:hover { background: #0097a7; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #3e3e50; }
+        th { background: #333344; color: #4fc3f7; }
+        tr:hover { background: #333344; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Панель управления СКУД</h1>
+
+        <!-- Блок статуса -->
+        <div class="card">
+            <h2>Текущий статус системы</h2>
+            <div id="statusBadge" class="status-badge status-ЗАБЛОКИРОВАНО">ЗАБЛОКИРОВАНО</div>
+            <p style="color: #aaa; margin-top: 10px;">Последнее обновление: <span id="lastUpdate">-</span></p>
+        </div>
+
+        <!-- Блок управления -->
+        <div class="card">
+            <h2>Доступ к замку</h2>
+            <input type="password" id="passInput" placeholder="Введите код" maxlength="4">
+            <button onclick="sendPassword()">Открыть</button>
+        </div>
+
+        <!-- Блок логов -->
+        <div class="card" style="text-align: left;">
+            <h2>Журнал событий (PostgreSQL)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Время</th>
+                        <th>Событие</th>
+                        <th>Сообщение от Arduino</th>
+                    </tr>
+                </thead>
+                <tbody id="logsTable">
+                    <!-- Сюда JS вставит строки -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = `${window.location.origin}/api`;
+
+        // Функция отправки пароля
+        async function sendPassword() {
+            const pass = document.getElementById("passInput").value;
+            if(!pass) return;
+
+            await fetch(`${API_URL}/open`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pass })
+            });
+            document.getElementById("passInput").value = "";
+            setTimeout(updateDashboard, 500); // Быстро обновляем интерфейс
+        }
+
+        // Обновление данных на странице
+        async function updateDashboard() {
+            try {
+                // 1. Получаем статус
+                const resStatus = await fetch(`${API_URL}/status`);
+                const statusData = await resStatus.json();
+                const badge = document.getElementById("statusBadge");
+                badge.innerText = statusData.status;
+                badge.className = `status-badge status-${statusData.status}`;
+                document.getElementById("lastUpdate").innerText = statusData.last_update || "нет данных";
+
+                // 2. Получаем логи
+                const resLogs = await fetch(`${API_URL}/logs`);
+                const logs = await resLogs.json();
+                const tbody = document.getElementById("logsTable");
+                tbody.innerHTML = "";
+
+                logs.forEach(log => {
+                    const row = `<tr>
+                        <td>${log.time}</td>
+                        <td style="font-weight:bold; color:#4fc3f7">${log.type}</td>
+                        <td>${log.message}</td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+            } catch (e) {
+                console.error("Ошибка обновления дашборда", e);
+            }
+        }
+
+        // Опрашиваем бэкенд каждые 2 секунды
+        setInterval(updateDashboard, 2000);
+        updateDashboard();
+    </script>
+</body>
+</html>
